@@ -39,13 +39,14 @@ namespace nodes {
 
 class ImagePublisher : public rclcpp::Node {
 public:
-  ImagePublisher(const std::string & node_name, 
-    const std::string & topic_name)
-  : Node(node_name)
+  ImagePublisher(const std::string & name, const std::string & topic)
+  : Node(name)
   {
     this->declare_parameter("dt");
     this->declare_parameter("max_count");
     this->declare_parameter("dimensions");
+    this->declare_parameter("delay");
+    this->declare_parameter("benchmark_path");
 
     auto parameters_client = std::make_shared<rclcpp::SyncParametersClient>(this);
     while (!parameters_client->wait_for_service(1s)) {
@@ -59,37 +60,25 @@ public:
     dt = parameters_client->get_parameter<uint32_t>("dt", 10);
     max_count = parameters_client->get_parameter<uint32_t>("max_count", 100);
     dimensions = parameters_client->get_parameter<uint32_t>("dimensions", 1024);
+    delay = parameters_client->get_parameter<uint32_t>("delay", 0);
+    benchmark_path = parameters_client->get_parameter<std::string>("benchmark_path", "");
 
-    publisher = this->create_publisher<sensor_msgs::msg::Image>(topic_name, 10);
-    done_publisher = this->create_publisher<std_msgs::msg::Empty>("/done", 10);
-    // Temporary disabled!
-    // subscriber = this->create_subscription<std_msgs::msg::Empty>(
-    //   "/ready",
-    //   10,
-    //   std::bind(&ImagePublisher::run, this, _1));
-    
-    timer = this->create_wall_timer(std::chrono::milliseconds(dt), std::bind(&ImagePublisher::timer_callback, this));
-    random_image_data_ = randomImageData(dimensions * 4 * dimensions);  // image step * height
+    publisher = this->create_publisher<sensor_msgs::msg::Image>(topic, 10);
+    delay_timer = this->create_wall_timer(std::chrono::milliseconds(delay), std::bind(&ImagePublisher::delay_callback, this));
+    random_image_data = randomImageData(dimensions * 4 * dimensions);  // image step * height
   }
 
 private:
-  // Temporary disabled!
-  // void run(const std_msgs::msg::Empty::SharedPtr msg) {
-  //   std::cout << "Is running yes" << std::endl;
-  //       if (is_running) {
-  //         std::cout << "Is running yes" << std::endl;
-  //         return;
-  //       } else {
-  //         std::cout << "Creating wall timer " << dt << std::endl;
-  //         timer = this->create_wall_timer(std::chrono::milliseconds(dt), std::bind(&ImagePublisher::timer_callback, this));
-  //         std::cout << "Creating wall timer2" << std::endl;
-  //         is_running = true;
-  //       }
-  // }
-
+  void delay_callback()
+  {
+    std::cout << this->get_name() <<  ": Delay finished" << std::endl;
+    timer = this->create_wall_timer(std::chrono::milliseconds(dt), std::bind(&ImagePublisher::timer_callback, this));
+    delay_timer->cancel();
+  }
   void timer_callback()
   {
     uint32_t static current_msg_count = 0;
+
     auto message = sensor_msgs::msg::Image();
     message.header = std_msgs::msg::Header();
     message.header.frame_id = "image_frame";
@@ -99,27 +88,28 @@ private:
     message.height = static_cast<sensor_msgs::msg::Image::_height_type>(dimensions);
     message.width = static_cast<sensor_msgs::msg::Image::_width_type>(dimensions);
     message.step = static_cast<sensor_msgs::msg::Image::_step_type>(dimensions * 4);
-    message.data = random_image_data_;
+    message.data = random_image_data;
 
     publisher->publish(message);
 
-    std::cout << current_msg_count << std::endl;
+    std::cout << this->get_name() << ": " << current_msg_count << std::endl;
     if(++current_msg_count == max_count) {
-      done_publisher->publish(std_msgs::msg::Empty());
       timer->cancel();
       rclcpp::shutdown();
     }
+
+    //(piotr.jaroszek) TODO: raport data here and save to benchmark_path
   }
 
-  std::vector<uint8_t> random_image_data_;
-  bool is_running = false;
+  std::vector<uint8_t> random_image_data;
+  std::string benchmark_path;
   uint32_t dt;
   uint32_t max_count;
   uint32_t dimensions;
+  uint32_t delay;
   rclcpp::TimerBase::SharedPtr timer;
+  rclcpp::TimerBase::SharedPtr delay_timer;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr publisher;
-  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr done_publisher;
-  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr subscriber;
 };
 
 }  // namespace nodes
