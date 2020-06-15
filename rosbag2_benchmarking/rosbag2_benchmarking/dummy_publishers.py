@@ -1,4 +1,4 @@
-import rclpy
+import rclpy, time
 from rclpy.node import Node
 
 class DummyPublisherUtility(Node):
@@ -18,6 +18,7 @@ class DummyPublisherUtility(Node):
 
         for i in range(0,len(topics)):
             self.warm_up_topic(topics[i], types[i])
+            time.sleep(0.01)
 
     def warm_up_topic(self, topic, type_):
         if type_ == "sensor_msgs/msg/Image":
@@ -26,7 +27,7 @@ class DummyPublisherUtility(Node):
         elif type_ == "sensor_msgs/msg/PointCloud2":
             from sensor_msgs.msg import PointCloud2
             self.__publishers.append(self.create_publisher(PointCloud2, topic, 1))
-        elif type_ == "sensor_msgs/msg/ByteMultiArray":
+        elif type_ == "std_msgs/msg/ByteMultiArray":
             from std_msgs.msg import ByteMultiArray
             self.__publishers.append(self.create_publisher(ByteMultiArray, topic, 1))
         else:
